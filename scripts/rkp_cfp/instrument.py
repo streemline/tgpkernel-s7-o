@@ -330,7 +330,7 @@ def instrument(objdump, func=None, skip=set([]), skip_stp=set([]), skip_asm=set(
                        ((insn['args']['base_reg']) << 5) | \
                        (insn['args']['reg1'])
                 objdump.write(i, stp)
-                
+
                 # eor x30, RRX, RRK
                 eor = eor_insn(forward_insn[0],
                         reg1=REG_LR, reg2=objdump.RRX, reg3=objdump.RRK)
@@ -503,8 +503,8 @@ class Objdump(object):
             if sym[NE_TYPE] in ['d', 'D']:
                 # This symbol appears in the .data section but it's code since it's 
                 # declared using both ENTRY and ENDPROC assembly routine markers
-                start_address = '0x' + sym[NE_ADDR]
-                stop_address = '0x' + _hex(_int(sym[NE_ADDR]) + sym[NE_SIZE]*BYTES_PER_INSN)
+                start_address = f'0x{sym[NE_ADDR]}'
+                stop_address = f'0x{_hex(_int(sym[NE_ADDR]) + sym[NE_SIZE]*BYTES_PER_INSN)}'
                 subprocess.check_call(("{OBJDUMP} -D {vmlinux} "
                     "--start-address={start_address} --stop-address={stop_address} >> {tmp}").format(
                     OBJDUMP=OBJDUMP, vmlinux=pipes.quote(self.vmlinux), tmp=pipes.quote(tmp), 
@@ -526,22 +526,19 @@ class Objdump(object):
         with open(tmp, 'r') as f:
             for i, line in enumerate(f):
                 virt_addr = None
-                m = re.search(virt_addr_re, line)
-                if m:
-                    virt_addr = _int(m.group('virt_addr'))
+                if m := re.search(virt_addr_re, line):
+                    virt_addr = _int(m['virt_addr'])
 
                 self.lines.append((line, section_idx, virt_addr))
 
-                m = re.search(r'Disassembly of section (?P<name>.*):', line)
-                if m:
-                    section_idx = self.sections['section_idx'][m.group('name')]
+                if m := re.search(r'Disassembly of section (?P<name>.*):', line):
+                    section_idx = self.sections['section_idx'][m['name']]
                     continue
 
-                m = re.search(common.fun_rec, line)
-                if m:
-                    if m.group('func_name') not in self.func_idx:
-                        self.func_idx[m.group('func_name')] = set()
-                    self.func_idx[m.group('func_name')].add(i)
+                if m := re.search(common.fun_rec, line):
+                    if m['func_name'] not in self.func_idx:
+                        self.func_idx[m['func_name']] = set()
+                    self.func_idx[m['func_name']].add(i)
                     continue
         # We have all the objdump lines read, we can delete the file now.
         self._copy_to_tmp(tmp, 'objdump.txt')
@@ -666,14 +663,10 @@ class Objdump(object):
         self.read_f = None
 
     def is_conf_set(self, var):
-        if self.conf is None:
-            return None
-        return self.conf.get(var) == 'y'
+        return None if self.conf is None else self.conf.get(var) == 'y'
 
     def get_conf(self, var):
-        if self.conf is None:
-            return None
-        return self.conf.get(var) 
+        return None if self.conf is None else self.conf.get(var) 
 
     def flush(self):
         self.write_mmap.flush()
@@ -740,7 +733,7 @@ class Objdump(object):
     def func_offset(self, func, i=None):
         i = self.get_func_idx(func, i)
         m = re.search(Objdump.FUNC_OFFSET_RE, self.line(i))
-        return _int(m.group('virt_addr'))
+        return _int(m['virt_addr'])
 
     PARSE_INSN_RE = re.compile((
         r'(?P<virt_addr>{hex_re}):\s+'
@@ -772,7 +765,7 @@ class Objdump(object):
         if insn['type'] == 'bl':
             # imm26 (bits 0..25)
             insn['args']['offset'] = from_twos_compl((hexint(insn['binary']) & BL_OFFSET_MASK) << 2, nbits=26 + 2)
-        elif insn['type'] in set(['blr', 'ret']):
+        elif insn['type'] in {'blr', 'ret'}:
             arg = {
             'blr':'dst_reg',
             'ret':'target_reg',
@@ -788,8 +781,9 @@ class Objdump(object):
             insn['args']['imm'] = from_twos_compl(
                     ((hexint(insn['binary']) & STP_IMM7_MASK) >> 15) << lsl_bits, 
                     nbits=7 + lsl_bits)
-        elif mask_shift(insn, ADDIMM_OPCODE_MASK, 24) == ADDIM_OPCODE_BITS \
-                and insn['type'] in set(['add', 'mov']):
+        elif mask_shift(insn, ADDIMM_OPCODE_MASK, 24) == ADDIM_OPCODE_BITS and insn[
+            'type'
+        ] in {'add', 'mov'}:
             insn['type'] = 'add'
             insn['args']['sf'] = mask_shift(insn, ADDIMM_SF_MASK, 31)
             insn['args']['shift'] = mask_shift(insn, ADDIMM_SHIFT_MASK, 22)
@@ -806,15 +800,16 @@ class Objdump(object):
             insn['args']['reg1']     = mask_shift(insn , STP_RT_MASK              , 0)
             insn['args']['base_reg'] = mask_shift(insn , STP_RN_MASK              , 5)
             insn['args']['reg2']     = mask_shift(insn , STP_RT2_MASK             , 10)
-        elif mask_shift(insn, ADDIMM_OPCODE_MASK, 24) == ADDIM_OPCODE_BITS \
-                and insn['type'] in set(['add', 'mov']):
-                insn['type'] = 'add'
-                insn['args']['sf'] = mask_shift(insn, ADDIMM_SF_MASK, 31)
-                insn['args']['shift'] = mask_shift(insn, ADDIMM_SHIFT_MASK, 22)
-                insn['args']['imm'] = mask_shift(insn, ADDIMM_IMM_MASK, 10)
-                insn['args']['src_reg'] = mask_shift(insn, ADDIMM_RN_MASK, 5)
-                insn['args']['dst_reg'] = mask_shift(insn, ADDIMM_RD_MASK, 0)
-                insn['args']['opcode_bits'] = mask_shift(insn, ADDIMM_OPCODE_MASK, 24)
+        elif mask_shift(insn, ADDIMM_OPCODE_MASK, 24) == ADDIM_OPCODE_BITS and insn[
+            'type'
+        ] in {'add', 'mov'}:
+            insn['type'] = 'add'
+            insn['args']['sf'] = mask_shift(insn, ADDIMM_SF_MASK, 31)
+            insn['args']['shift'] = mask_shift(insn, ADDIMM_SHIFT_MASK, 22)
+            insn['args']['imm'] = mask_shift(insn, ADDIMM_IMM_MASK, 10)
+            insn['args']['src_reg'] = mask_shift(insn, ADDIMM_RN_MASK, 5)
+            insn['args']['dst_reg'] = mask_shift(insn, ADDIMM_RD_MASK, 0)
+            insn['args']['opcode_bits'] = mask_shift(insn, ADDIMM_OPCODE_MASK, 24)
         else:
             insn['args']['raw'] = line[m.end():]
         return insn
@@ -997,6 +992,7 @@ class Objdump(object):
 
         def is_insn(line):
             return not re.search(common.fun_rec, line) and re.search(virt_addr_re, line)
+
         def each_line():
             for i, line in enumerate(self.lines):
                 line = line[0]
@@ -1005,6 +1001,7 @@ class Objdump(object):
                     continue
                 last_insns.pop(0)
                 last_insns.append(line)
+
         last_func_insns = list(last_insns)
 
         func_lines = []
@@ -1012,13 +1009,11 @@ class Objdump(object):
         func_i = None
         def _tuple(func_i, func, func_lines, last_func_insns):
             func_tup = None
-            if with_func_i:
-                func_tup = (func_i, func)
-            else:
-                func_tup = (func,)
+            func_tup = (func_i, func) if with_func_i else (func, )
             if num_last_insns:
                 return func_tup + (func_lines, last_func_insns)
             return func_tup + (func_lines,)
+
         for i, line in each_line():
             m = re.search(common.fun_rec, line)
             if m:
@@ -1027,7 +1022,7 @@ class Objdump(object):
                 if num_last_insns:
                     last_func_insns = list(last_insns)
                 func_lines = []
-                func = m.group('func_name')
+                func = m['func_name']
                 func_i = i
             elif func is None:
                 continue
@@ -1074,10 +1069,11 @@ class Objdump(object):
         end = len(self.lines) - 1
         if end_func is not None:
             end = self.get_func_end_idx(end_func, end_i)
-        assert not( end_func is None and end_i is not None )
-        
+        assert end_func is not None or end_i is None
+
         def should_skip_func(func):
             return skip_func is not None and skip_func(func)
+
         assert start_func is not None
 
         last_insns = None
@@ -1103,10 +1099,7 @@ class Objdump(object):
 
         do_skip_func = should_skip_func(start_func)
         def _tup(i, curfunc, func_i, to_yield):
-            if just_insns:
-                return i, to_yield
-            else:
-                return curfunc, func_i, i, to_yield
+            return (i, to_yield) if just_insns else (curfunc, func_i, i, to_yield)
 
         def _parse(to_yield, i):
             if to_yield is None:
@@ -1155,13 +1148,14 @@ class Objdump(object):
             end_func_idx = min(i+chunk-1, len(funcs)-1)
             start_i = funcs[start_func_idx][1]
             end_i = funcs[end_func_idx][1]
-            kwargs.update({
-                'start_func':funcs[start_func_idx][0],
-                'end_func':funcs[end_func_idx][0],
-                'start_i':start_i,
-                'end_i':end_i,
-                'tid':n,
-                })
+            kwargs |= {
+                'start_func': funcs[start_func_idx][0],
+                'end_func': funcs[end_func_idx][0],
+                'start_i': start_i,
+                'end_i': end_i,
+                'tid': n,
+            }
+
             if threads == 1:
                 each_insn(**kwargs)
                 return
@@ -1356,11 +1350,12 @@ def list_symbol_locations(hex_func_pairs, obj, gdb=GDB):
     def _tuple(m):
         symbol = strip_hex_prefix(m.group('symbol'))
         return symbol, m.group('filepath'), int(m.group('lineno'))
+
     tup = (None, None, None)
     possible_files = set([])
     for line in iter(proc.stdout.readline, ''):
         if should_error(line):
-            raise GDBError("ERROR: " + line)
+            raise GDBError(f"ERROR: {line}")
         elif should_skip(line):
             continue
         elif re.search(r'^> SYMBOL', line):
@@ -1379,7 +1374,7 @@ def list_symbol_locations(hex_func_pairs, obj, gdb=GDB):
         # File net/sunrpc/cache.c:
         m = re.search(r'^File (?P<filepath>[^:]+):$', line)
         if m:
-            possible_files.add(m.group('filepath'))
+            possible_files.add(m['filepath'])
 
         # print line
         # 0xffffffc000bf7f20 is in boot_alloc_snapshot (kernel/trace/trace.c:208).
@@ -1428,26 +1423,30 @@ def parse_nm(vmlinux, symbols=None):
     last_symbol = None
     last_name = None
     for line in f:
-        m = re.search(NM_RE, line)
-        if m:
+        if m := re.search(NM_RE, line):
             if last_symbol is not None and ( symbols is None or last_name in symbols ):
-                last_symbol[NE_SIZE] = ( _int(m.group('addr')) - _int(last_symbol[NE_ADDR]) ) / BYTES_PER_INSN \
-                            if \
-                                re.match(hex_re, last_symbol[NE_ADDR]) and \
-                                re.match(hex_re, m.group('addr')) \
-                            else None
-            last_symbol = [m.group('symbol_type'), m.group('addr'), None]
-            last_name = m.group('symbol')
-            if symbols is None or m.group('symbol') in symbols:
-                nm[m.group('symbol')] = last_symbol
+                last_symbol[NE_SIZE] = (
+                    (_int(m['addr']) - _int(last_symbol[NE_ADDR]))
+                    / BYTES_PER_INSN
+                    if re.match(hex_re, last_symbol[NE_ADDR])
+                    and re.match(hex_re, m['addr'])
+                    else None
+                )
+
+            last_symbol = [m['symbol_type'], m['addr'], None]
+            last_name = m['symbol']
+            if symbols is None or m['symbol'] in symbols:
+                nm[m['symbol']] = last_symbol
     return nm
 
 def parse_plain_labels(asm_file):
     labels = set([])
     for line in each_line(asm_file):
-        m = re.search(r'^\s*(?:(?P<label>{ident_re}):)'.format(ident_re=common.ident_re), line)
-        if m:
-            labels.add(m.group('label'))
+        if m := re.search(
+            r'^\s*(?:(?P<label>{ident_re}):)'.format(ident_re=common.ident_re),
+            line,
+        ):
+            labels.add(m['label'])
             continue
     return labels
 def parse_asm(asm_file, 
@@ -1474,14 +1473,16 @@ def parse_asm(asm_file,
     narg = {}
     if not functions and not nargs:
         functions = True
-        nargs = True 
+        nargs = True
     def add_narg(m):
         symbol, n = re.split(r', ', m.group('symbol'))
         if nargs:
             narg[symbol] = (asm_file, int(n))
         return symbol
+
     def asm_pattern(macroname):
         return r'^\s*' + macroname + r'\((?P<symbol>[^)\\]+)\)'
+
     for line in each_line(asm_file):
         m = re.search(asm_pattern('FUNC_ENTRY'), line)
         if m:
@@ -1494,15 +1495,15 @@ def parse_asm(asm_file,
             continue
         m = re.search(asm_pattern('ENTRY'), line)
         if m:
-            entry.add(m.group('symbol'))
+            entry.add(m['symbol'])
             continue
         m = re.search(asm_pattern('VECTOR_ENTRY'), line)
         if m:
-            vector_entry.add(m.group('symbol'))
+            vector_entry.add(m['symbol'])
             continue
         m = re.search(asm_pattern('ENDPROC'), line)
         if m:
-            endproc.add(m.group('symbol'))
+            endproc.add(m['symbol'])
             continue
     funcs = endproc.intersection(
             (entry.union(func_entry)).difference(
@@ -1591,11 +1592,12 @@ def parse_sections(vmlinux):
         if m:
             section = {}
 
-            d['section_idx'][m.group('name')] = int(m.group('number'))
+            d['section_idx'][m['name']] = int(m['number'])
 
             def parse_power(x):
                 m = re.match(r'(?P<base>\d+)\*\*(?P<exponent>\d+)', x)
-                return int(m.group('base'))**int(m.group('exponent'))
+                return int(m['base'])**int(m['exponent'])
+
             section.update(coerce(m.groupdict(), [
                 [_int, ['size', 'address', 'offset', 'lma']],
                 [int, ['number']],
@@ -1684,12 +1686,24 @@ def main():
             help="Only instrument the {DEFAULT_TEST_FUNC} function".format(
                 DEFAULT_TEST_FUNC=DEFAULT_TEST_FUNC))
     _reg_note = " (NOTE: must be kept in sync with macro definitions in init/hyperdrive.S)"
-    parser.add_argument("--RRK", default=RRK_DEFAULT,
-            help="ARM64 register reserved for storing the return-address key" + _reg_note)
-    parser.add_argument("--RRX", default=RRX_DEFAULT,
-            help="ARM64 register reserved for scratch during BL/BLR instrumentation" + _reg_note)
-    parser.add_argument("--RRS", default=RRS_DEFAULT,
-            help="ARM64 register reserved for storing the springboard base address" + _reg_note)
+    parser.add_argument(
+        "--RRK",
+        default=RRK_DEFAULT,
+        help=f"ARM64 register reserved for storing the return-address key{_reg_note}",
+    )
+
+    parser.add_argument(
+        "--RRX",
+        default=RRX_DEFAULT,
+        help=f"ARM64 register reserved for scratch during BL/BLR instrumentation{_reg_note}",
+    )
+
+    parser.add_argument(
+        "--RRS",
+        default=RRS_DEFAULT,
+        help=f"ARM64 register reserved for storing the springboard base address{_reg_note}",
+    )
+
 
     parser.add_argument("--debug", action='store_true')
     parser.add_argument("--inplace", action='store_true',
@@ -1710,7 +1724,7 @@ def main():
     if not os.path.exists(args.vmlinux):
         parser.error("--vmlinux ({vmlinux}) doesn't exist".format(vmlinux=args.vmlinux))
 
-    kernel_src = args.kernel_src if args.kernel_src else guess_kernel_src(args.vmlinux)
+    kernel_src = args.kernel_src or guess_kernel_src(args.vmlinux)
     if kernel_src is None:
         parser.error("Need top directory of kernel source for --kernel-src")
 
@@ -1746,18 +1760,16 @@ def main():
 def each_line(fname):
     with open(fname) as f:
         for line in f:
-            line = line.rstrip()
-            yield line
+            yield line.rstrip()
 
 def each_func_lines(objdump_path):
     lines = []
     func = None
     for line in each_line(objdump_path):
-        m = re.search(common.fun_rec, line)
-        if m:
+        if m := re.search(common.fun_rec, line):
             yield func, lines
             lines = []
-            func = m.group('func_name')
+            func = m['func_name']
         elif func is None:
             continue
         lines.append(line)
@@ -1771,9 +1783,7 @@ def guess_kernel_src(vmlinux):
 
 def guess_config_file(vmlinux):
     config_file = os.path.join(my_dirname(vmlinux), '.config')
-    if os.path.exists(config_file):
-        return config_file
-    return None
+    return config_file if os.path.exists(config_file) else None
 
 def parse_config(config_file):
     """
@@ -1784,9 +1794,8 @@ def parse_config(config_file):
     """
     conf = {}
     for line in each_line(config_file):
-        m = re.search(r'^\s*(?P<var>[A-Z0-9_]+)=(?P<value>[^\s#]+)', line)
-        if m:
-            conf[m.group('var')] = m.group('value')
+        if m := re.search(r'^\s*(?P<var>[A-Z0-9_]+)=(?P<value>[^\s#]+)', line):
+            conf[m['var']] = m['value']
     return conf
 
 def first_n(xs, n):
@@ -1812,9 +1821,8 @@ def parse_skip(skip_file):
     skip = set([])
     with open(skip_file, 'r') as f:
         for line in f:
-            m = re.search(r'^\s*(?P<entry>[^\s#]+)', line)
-            if m:
-                skip.add(m.group('entry'))
+            if m := re.search(r'^\s*(?P<entry>[^\s#]+)', line):
+                skip.add(m['entry'])
     return skip
 
 DEFAULT_PICKLE_FNAME="{dirname}/.{basename}.pickle"
@@ -1875,12 +1883,7 @@ def from_twos_compl(x, nbits):
     """
     # Truely <= nbits long?
     assert x == x & ((2**nbits) - 1)
-    if x & (1 << (nbits - 1)):
-        # sign bit is set; it's negative
-        flip = -( (x ^ (2**nbits) - 1) + 1 )
-        # twiddle = ~x + 1
-        return flip
-    return x
+    return -( (x ^ (2**nbits) - 1) + 1 ) if x & (1 << (nbits - 1)) else x
 
 def to_twos_compl(x, nbits):
     """

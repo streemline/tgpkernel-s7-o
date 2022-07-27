@@ -7,7 +7,7 @@ hex_rec = re.compile(hex_re)
 reg_re = r'\b(?:(?:x|w)(\d+))\b'
 reg_rec = re.compile(reg_re)
 
-fun_re = r'(?P<func_addr>' + hex_re + ') <(?P<func_name>[^>]+)>:$'
+fun_re = f'(?P<func_addr>{hex_re}) <(?P<func_name>[^>]+)>:$'
 fun_rec = re.compile(fun_re)
 
 ident_re = r'(?:[a-zA-Z_][a-zA-Z0-9_]*)'
@@ -61,6 +61,7 @@ def log(msg=''):
 """
 Centralized skip and CONFIG flag
 """
+
 #File containing functions to skip instrumenting
 skip = set([])
 
@@ -69,31 +70,26 @@ File containing assembly functions that have been manually inspected to
 disable preemption/interrupts instead of doing 'stp x29, x30' 
 (i.e. don't error out during validation for these functions)
 """
-skip_save_lr_to_stack = set([
-    'flush_cache_all', 
-    'flush_cache_louis'])
+skip_save_lr_to_stack = {'flush_cache_all', 'flush_cache_louis'}
 
 
 
-skip_stp = set([
-    '__cpu_suspend_enter'])
+skip_stp = {'__cpu_suspend_enter'}
 
 #File containing assembly file paths whose functions we should skip instrumenting
 skip_asm = set([])
 
 
 #ASM functions code that are permitted to have br instructions in them
-skip_br=set([
-    'stext', 
-    '__turn_mmu_on', 
-    'el0_svc_naked', 
-    '__sys_trace', 
-    'fpsimd_save_partial_state', 
-    'fpsimd_load_partial_state', 
-    'cpu_resume_mmu' ])
-
-skip_blr=set([
-    'secondary_startup', 
+skip_br = {
+    'stext',
+    '__turn_mmu_on',
     'el0_svc_naked',
-    '__sys_trace'
-    ])
+    '__sys_trace',
+    'fpsimd_save_partial_state',
+    'fpsimd_load_partial_state',
+    'cpu_resume_mmu',
+}
+
+
+skip_blr = {'secondary_startup', 'el0_svc_naked', '__sys_trace'}
